@@ -25,7 +25,8 @@ class NeuralNetwork(nn.Module):
 def predict(gamescores):
     gamescores = str(gamescores)
     gamescoresFloat = torch.FloatTensor(list(map(lambda gs: float(gs), gamescores.split(","))))
-    return model(gamescoresFloat).tolist()
+    output = model(gamescoresFloat).tolist()
+    return output
 
 if __name__ == '__main__':
     model = NeuralNetwork().to("cpu")

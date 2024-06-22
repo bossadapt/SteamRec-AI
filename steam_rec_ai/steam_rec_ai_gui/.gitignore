@@ -29,12 +29,14 @@ yarn-error.log*
 *.env
 #model
 model2.pth
+detailedClassifications.json
 # vercel
 .vercel
 # rust stuff
 *cargo.lock
-*cargo.toml
 target
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+favicon.ico
+package.json
