@@ -35,9 +35,9 @@ struct GameInfo {
     #[serde(default)]
     score: f32,
     is_free: bool,
-    detailed_description: String,
+    short_description: String,
     developers: Option<Vec<String>>,
-    capsule_image: String,
+    header_image: String,
     release_date: ReleaseDate,
     platforms: Platforms,
     price_overview: Option<PriceOverview>,
@@ -134,21 +134,26 @@ fn error_out(msg: &str) -> Json<Data> {
 async fn convert_link(type_given: &str, id: &str, state: &State<IndividualState>) -> Json<Data> {
     let mut games_included = false;
     let mut reviews_included = false;
-    println!("Got request for [typeid:{},id:{}]", type_given, id);
-    if let Ok((visability, steam_id)) = get_visibility(type_given, id, &state.client).await {
+    println!("Got request for /{}/{}", type_given, id);
+    let visability_check = get_visibility(type_given, id, &state.client).await;
+    if let Ok((visability, steam_id)) = visability_check {
         if visability.games || visability.reviews {
             let mut games: Vec<Game> = vec![];
             let mut reviews: Vec<Review> = vec![];
             if visability.games {
                 if let Ok(new_games) = get_game_list(&steam_id, &state.steam_api).await {
-                    games_included = true;
-                    games = new_games;
+                    if new_games.len() > 0 {
+                        games_included = true;
+                        games = new_games;
+                    }
                 }
             }
             if visability.reviews {
                 if let Ok(new_reviews) = get_review_list(&steam_id, &state.client).await {
-                    reviews_included = true;
-                    reviews = new_reviews;
+                    if new_reviews.len() > 0 {
+                        reviews_included = true;
+                        reviews = new_reviews;
+                    }
                 }
             }
             let mut scorelist = games_and_reviews_into_scorelist(
@@ -166,7 +171,7 @@ async fn convert_link(type_given: &str, id: &str, state: &State<IndividualState>
             return error_out("Neither game nor reviews are public");
         }
     } else {
-        return error_out("Profile does not exist");
+        return error_out(&visability_check.unwrap_err());
     }
 }
 async fn get_ai_guess(
@@ -214,7 +219,13 @@ async fn get_raw_page(url: &String, time_to_sleep: u64) -> Result<String, String
     sleep(Duration::from_secs(time_to_sleep)).await;
     match reqwest::get(url).await {
         Ok(resp) => return Ok(resp.text().await.unwrap()),
-        Err(_err) => return Err(format!("Failed to grab raw webpage at: {}", url)),
+        Err(_err) => {
+            sleep(Duration::from_secs(60)).await;
+            return match reqwest::get(url).await {
+                Ok(resp) => return Ok(resp.text().await.unwrap()),
+                Err(_err) => return Err(format!("Failed to grab raw webpage at: {}", url)),
+            };
+        }
     }
 }
 struct Output {
@@ -275,9 +286,9 @@ async fn get_classification_game_list() -> Vec<GameInfo> {
                             name: "unknown".to_owned(),
                             steam_appid: current_id.parse::<u32>().unwrap(),
                             score: 0.0,
-                            detailed_description: "".to_owned(),
+                            short_description: "".to_owned(),
                             developers: Some(vec![]),
-                            capsule_image: "".to_owned(),
+                            header_image: "".to_owned(),
                             release_date: ReleaseDate {
                                 coming_soon: false,
                                 date: "".to_owned(),
@@ -365,7 +376,12 @@ async fn get_visibility(
     if type_id == "profiles" {
         steam_id = id.to_owned();
     } else {
-        steam_id = get_steam_id_from_profile(&document).unwrap();
+        let steam_id_attempt = get_steam_id_from_profile(&document);
+        if steam_id_attempt.is_ok() {
+            steam_id = steam_id_attempt.unwrap();
+        } else {
+            return Err(steam_id_attempt.unwrap_err());
+        }
     }
     let scraper_selector = scraper::Selector::parse("div.profile_item_links").unwrap();
     let page_items = document.select(&scraper_selector);

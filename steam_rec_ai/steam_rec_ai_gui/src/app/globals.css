@@ -3,3 +3,9 @@
   width: 100vw;
   background-color: black;
 }
+* {
+  color: white;
+}
+input {
+  color: black;
+}
